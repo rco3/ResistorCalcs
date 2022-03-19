@@ -8,27 +8,64 @@ Created on Sun May 31 22:29:25 2020
 from math import log10, floor, ceil
 
 
-def Closest_E_Value(value, series):
-    dec = floor(log10(value))
-    # print(dec)
+def Closest_E_Value(value: float, series: int):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
-        return round(10**(round(log10(value)*series)/series), 2 - dec)
+        NH = Next_Higher_Val(value, series)
+        NL = Next_Lower_Val(value, series)
+        if (NH - value) > (value - NL):
+           return NL
+        else:
+            return NH
 
 
-def Value_From_Pos(Pos, series):
-    return Closest_E_Value( 10**(Pos/series), series)
+def Value_From_Pos(serPos, series):
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        return 0
+    else:
+        (decade, decPos) = divmod(serPos, series)
+        rounding = 2
+        if series in {3, 6, 12, 24}:
+            rounding = 1
+        scale = round(10 ** (decPos / series), rounding)
+        if series == 24:  # there are a lot of "standard" values in the E24 series.  We have to catch them and fix them.
+            if decPos in {10, 11, 12, 13, 14, 15, 16}:
+                scale += 0.1  # 2.6 - 4.6 are really 2.7 - 4.7
+            elif decPos == 22:
+                scale = 8.2  # 8.3 is mathematically correct, so we use 8.2
+        elif series == 192:
+            if scale == 9.19:
+                scale = 9.20  # Ah, the rich tapestry of history
+        return round(scale * 10**decade, 10)
 
 
 def Next_Lower_Val(value, series):
-    dec = floor(log10(value))
-    return round(10**(floor(log10(value)*series)/series), 2 - dec)
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        return 0
+    else:
+        Pos = floor(log10(value) * series)+1  # OH MY GOD I'm so lazy.  The variance between standard values and series
+        newVal = Value_From_Pos(Pos, series)  # values means that there are situations in which the next lower value in
+        if newVal < value:                      # the series is missed, in either direction (+1 position or -1)
+            return newVal                       # so I just fucking TEST THEM ALL
+        elif Value_From_Pos(Pos-1, series) < value:
+            return Value_From_Pos(Pos-1, series)
+        else:
+            return Value_From_Pos(Pos-2, series)
 
 
 def Next_Higher_Val(value, series):
-    dec = floor(log10(value))
-    return round(10**(ceil(log10(value)*series)/series), 2 - dec)
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        return 0
+    else:
+        Pos = ceil(log10(value) * series)-1  # This mirrors my shame from Next_Lower_Val
+        newVal = Value_From_Pos(Pos, series)
+        if newVal > value:
+            return newVal
+        elif Value_From_Pos(Pos+1, series) > value:
+            return Value_From_Pos(Pos+1, series)
+        else:
+            return Value_From_Pos(Pos+2, series)
 
 
 def Req_Par_Val(ValG, Val1):
@@ -51,22 +88,33 @@ def ParTripErr(val, V1, V2, V3):
 
 
 def Vpar(V1, V2):
-    return ((V1*V2)/(V1+V2))
+    return (V1 * V2) / (V1 + V2)
 
 
 def Next_H_Pos(val, series):
-    E = ceil(log10(val)*series)
-    if val < Value_From_Pos(E, series):
-        return E
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        return 0
     else:
-        return E+1
+        E = ceil(log10(val)*series)-1
+        if val < Value_From_Pos(E, series):
+            return E
+        elif val < Value_From_Pos(E+1, series):
+            return E+1
+        else:
+            return E+2
 
 
 def Next_L_Pos(val, series):
-    F = floor(log10(val)*series)
-    if val > Value_From_Pos(F+1, series):
-        return F+1
-    return F
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        return 0
+    else:
+        E = floor(log10(val)*series)+1
+        if val > Value_From_Pos(E, series):
+            return E
+        elif val > Value_From_Pos(E-1, series):
+            return E-1
+        else:
+            return E-2
 
 
 def Closest_Pos(val, series):
