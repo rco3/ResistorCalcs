@@ -37,7 +37,9 @@ def Value_From_Pos(serPos, series):
         elif series == 192:
             if scale == 9.19:
                 scale = 9.20  # Ah, the rich tapestry of history
-        return round(scale * 10**decade, 10)
+        value = round(scale * 10**decade, 10)
+        if value > 0:
+            return value
 
 
 def Next_Lower_Val(value, series):
@@ -81,6 +83,7 @@ def Req_Par_Val(ValG, Val1):
 
 def ParPairErr(val, V1, V2):
     return round(100*((Vpar(V1, V2) - val)/val), 3)
+    # See that '100*'?  That means this error is in %, baby!
 
 
 def ParTripErr(val, V1, V2, V3):
