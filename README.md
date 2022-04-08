@@ -1,5 +1,5 @@
 # ResistorCalcs
-Python module for mapping resistor values to E96 series positions, and using positional information to calculate optimal combinations (2 parallel -> goal value, 3 parallel -> goal value, etc)
+Python module for mapping resistor values to standard E-series positions, and using positional information to calculate optimal combinations (2 parallel -> goal value, 3 parallel -> goal value, etc).  Includes "standard" values for E24 and E192 series.
 
 The initial impetus for the module was the desire to take advantage of the incredible utility of using logs to find the desired resistance value. Many operations are simplified in this way; however, the prevalence of "standard" values in place of the mathematically-derived "correct" values (particularly in the E24 series) complicates this process, and nullifies the ability to use the same, simple calculations everywhere.  Instead, the mapping happens in one place and all other functions call that for their operations.
 
