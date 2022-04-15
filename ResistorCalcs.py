@@ -42,13 +42,33 @@ def Value_From_Pos(serPos, series):
             return value
 
 
+def E96_Code_from_pos(pos: int):
+    decDict = {0: "Y", 1: "X", 2: "A", 3: "H", 4: "C", 5: "D", 6: "E", 7: "F", }
+    (decade, decPos) = divmod(pos, 96)
+    return f"{(decPos+1):02d}{decDict[decade]}"
+
+
+def Val_from_E96_code(code: str):
+    decDict = {"Y": 1, "R": 1, "X": 10, "A": 100, "H": 1000, "B": 1000, "C": 10000, "D": 100000, "E": 1000000, "F": 10000000, }
+    if len(code) != 3:
+        return "Invalid code"
+    else:
+        try:
+            print(f"Value code is {int(code[:2]):02d}, decade letter is {code[2]}")
+            print(f"That gives a decade multiplier of {decDict[code[2]]}")
+            print(f"The position value is {Value_From_Pos(int(code[:2])-1, 96)}")
+            return Value_From_Pos(int(code[:2])-1, 96)*decDict[code[2]]
+        except ValueError:
+            print("Couldn't interpret that code")
+
+
 def Next_Lower_Val(value, series):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
         Pos = floor(log10(value) * series)+1  # OH MY GOD I'm so lazy.  The variance between standard values and series
         newVal = Value_From_Pos(Pos, series)  # values means that there are situations in which the next lower value in
-        if newVal < value:                      # the series is missed, in either direction (+1 position or -1)
+        if newVal <= value:                      # the series is missed, in either direction (+1 position or -1)
             return newVal                       # so I just fucking TEST THEM ALL
         elif Value_From_Pos(Pos-1, series) < value:
             return Value_From_Pos(Pos-1, series)
@@ -62,7 +82,7 @@ def Next_Higher_Val(value, series):
     else:
         Pos = ceil(log10(value) * series)-1  # This mirrors my shame from Next_Lower_Val
         newVal = Value_From_Pos(Pos, series)
-        if newVal > value:
+        if newVal >= value:
             return newVal
         elif Value_From_Pos(Pos+1, series) > value:
             return Value_From_Pos(Pos+1, series)
@@ -99,9 +119,9 @@ def Next_H_Pos(val, series):
         return 0
     else:
         E = ceil(log10(val)*series)-1
-        if val < Value_From_Pos(E, series):
+        if val <= Value_From_Pos(E, series):
             return E
-        elif val < Value_From_Pos(E+1, series):
+        elif val <= Value_From_Pos(E+1, series):
             return E+1
         else:
             return E+2
@@ -112,9 +132,9 @@ def Next_L_Pos(val, series):
         return 0
     else:
         E = floor(log10(val)*series)+1
-        if val > Value_From_Pos(E, series):
+        if val >= Value_From_Pos(E, series):
             return E
-        elif val > Value_From_Pos(E-1, series):
+        elif val >= Value_From_Pos(E-1, series):
             return E-1
         else:
             return E-2
