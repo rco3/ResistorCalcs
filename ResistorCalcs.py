@@ -15,7 +15,7 @@ def Closest_E_Value(value: float, series: int):
         NH = Next_Higher_Val(value, series)
         NL = Next_Lower_Val(value, series)
         if (NH - value) > (value - NL):
-           return NL
+            return NL
         else:
             return NH
 
@@ -29,6 +29,17 @@ def Value_From_Pos(serPos, series):
         if series in {3, 6, 12, 24}:
             rounding = 1
         scale = round(10 ** (decPos / series), rounding)
+        if series == 3:
+            if decPos == 2:
+                scale += 0.1  # 4.6 is really 4.7
+        if series == 6:
+            if decPos in {3, 4}:
+                scale += 0.1
+        if series == 12:
+            if decPos in {5, 6, 7, 8}:
+                scale += 0.1
+            elif decPos == 11:
+                scale = 8.2
         if series == 24:  # there are a lot of "standard" values in the E24 series.  We have to catch them and fix them.
             if decPos in {10, 11, 12, 13, 14, 15, 16}:
                 scale += 0.1  # 2.6 - 4.6 are really 2.7 - 4.7
@@ -37,7 +48,7 @@ def Value_From_Pos(serPos, series):
         elif series == 192:
             if scale == 9.19:
                 scale = 9.20  # Ah, the rich tapestry of history
-        value = round(scale * 10**decade, 10)
+        value = round(scale * 10 ** decade, 10)
         if value > 0:
             return value
 
@@ -45,19 +56,20 @@ def Value_From_Pos(serPos, series):
 def E96_Code_from_pos(pos: int):
     decDict = {0: "Y", 1: "X", 2: "A", 3: "H", 4: "C", 5: "D", 6: "E", 7: "F", }
     (decade, decPos) = divmod(pos, 96)
-    return f"{(decPos+1):02d}{decDict[decade]}"
+    return f"{(decPos + 1):02d}{decDict[decade]}"
 
 
 def Val_from_E96_code(code: str):
-    decDict = {"Y": 1, "R": 1, "X": 10, "A": 100, "H": 1000, "B": 1000, "C": 10000, "D": 100000, "E": 1000000, "F": 10000000, }
+    decDict = {"Y": 1, "R": 1, "X": 10, "A": 100, "H": 1000, "B": 1000, "C": 10000, "D": 100000, "E": 1000000,
+               "F": 10000000, }
     if len(code) != 3:
         return "Invalid code"
     else:
         try:
             print(f"Value code is {int(code[:2]):02d}, decade letter is {code[2]}")
             print(f"That gives a decade multiplier of {decDict[code[2]]}")
-            print(f"The position value is {Value_From_Pos(int(code[:2])-1, 96)}")
-            return Value_From_Pos(int(code[:2])-1, 96)*decDict[code[2]]
+            print(f"The position value is {Value_From_Pos(int(code[:2]) - 1, 96)}")
+            return Value_From_Pos(int(code[:2]) - 1, 96) * decDict[code[2]]
         except ValueError:
             print("Couldn't interpret that code")
 
@@ -66,28 +78,29 @@ def Next_Lower_Val(value, series):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
-        Pos = floor(log10(value) * series)+1  # OH MY GOD I'm so lazy.  The variance between standard values and series
+        Pos = floor(
+            log10(value) * series) + 1  # OH MY GOD I'm so lazy.  The variance between standard values and series
         newVal = Value_From_Pos(Pos, series)  # values means that there are situations in which the next lower value in
-        if newVal <= value:                      # the series is missed, in either direction (+1 position or -1)
-            return newVal                       # so I just fucking TEST THEM ALL
-        elif Value_From_Pos(Pos-1, series) < value:
-            return Value_From_Pos(Pos-1, series)
+        if newVal <= value:  # the series is missed, in either direction (+1 position or -1)
+            return newVal  # so I just fucking TEST THEM ALL
+        elif Value_From_Pos(Pos - 1, series) < value:
+            return Value_From_Pos(Pos - 1, series)
         else:
-            return Value_From_Pos(Pos-2, series)
+            return Value_From_Pos(Pos - 2, series)
 
 
 def Next_Higher_Val(value, series):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
-        Pos = ceil(log10(value) * series)-1  # This mirrors my shame from Next_Lower_Val
+        Pos = ceil(log10(value) * series) - 1  # This mirrors my shame from Next_Lower_Val
         newVal = Value_From_Pos(Pos, series)
         if newVal >= value:
             return newVal
-        elif Value_From_Pos(Pos+1, series) > value:
-            return Value_From_Pos(Pos+1, series)
+        elif Value_From_Pos(Pos + 1, series) > value:
+            return Value_From_Pos(Pos + 1, series)
         else:
-            return Value_From_Pos(Pos+2, series)
+            return Value_From_Pos(Pos + 2, series)
 
 
 def Req_Par_Val(ValG, Val1):
@@ -98,16 +111,16 @@ def Req_Par_Val(ValG, Val1):
     ----------- = ValG
     Val1 + Val2
     """
-    return (ValG*Val1)/(Val1-ValG)
+    return (ValG * Val1) / (Val1 - ValG)
 
 
 def ParPairErr(val, V1, V2):
-    return round(100*((Vpar(V1, V2) - val)/val), 3)
+    return round(100 * ((Vpar(V1, V2) - val) / val), 3)
     # See that '100*'?  That means this error is in %, baby!
 
 
 def ParTripErr(val, V1, V2, V3):
-    return round(100*((ParTrips(V1, V2, V3) - val)/val), 5)
+    return round(100 * ((ParTrips(V1, V2, V3) - val) / val), 5)
 
 
 def Vpar(V1, V2):
@@ -118,32 +131,32 @@ def Next_H_Pos(val, series):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
-        E = ceil(log10(val)*series)-1
+        E = ceil(log10(val) * series) - 1
         if val <= Value_From_Pos(E, series):
             return E
-        elif val <= Value_From_Pos(E+1, series):
-            return E+1
+        elif val <= Value_From_Pos(E + 1, series):
+            return E + 1
         else:
-            return E+2
+            return E + 2
 
 
 def Next_L_Pos(val, series):
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
-        E = floor(log10(val)*series)+1
+        E = floor(log10(val) * series) + 1
         if val >= Value_From_Pos(E, series):
             return E
-        elif val >= Value_From_Pos(E-1, series):
-            return E-1
+        elif val >= Value_From_Pos(E - 1, series):
+            return E - 1
         else:
-            return E-2
+            return E - 2
 
 
 def Closest_Pos(val, series):
     Up = Next_H_Pos(val, series)
     Down = Next_L_Pos(val, series)
-    if (Value_From_Pos(Up, series)-val) > (val-Value_From_Pos(Down, series)):
+    if (Value_From_Pos(Up, series) - val) > (val - Value_From_Pos(Down, series)):
         return Down
     else:
         return Up
@@ -199,13 +212,13 @@ def List_Par_Trips(val, series):
     # print(Value_From_Pos(Emax, series))
     trips = list()
     for E in range(Emin, Emax):
-        V1 = Closest_E_Value(10**(E/series), series)
+        V1 = Closest_E_Value(10 ** (E / series), series)
         # first resistor
         V2e = Req_Par_Val(val, V1)
         pairs = List_Par_Pairs(V2e, series)
         for item in pairs:
             trips.append((V1, item[0], item[1], ParTrips(V1, item[0], item[1]),
-                         ParTripErr(val, V1, item[0], item[1])))
+                          ParTripErr(val, V1, item[0], item[1])))
     trips.sort(key=get_err_trips_abs)
 
     return trips[0:22]
@@ -215,8 +228,8 @@ def PrettyPrint(val):
     if val < 1000:  # no suffix required
         return '{0:3g}'.format(val).lstrip()
     elif val < 1000000:
-        return '{0:3g}k'.format(val/1000).lstrip()
+        return '{0:3g}k'.format(val / 1000).lstrip()
         # return '{:3g}k'.format(val/1000).lstrip()
     else:
-        return '{0:3g}M'.format(val/1000000).lstrip()
+        return '{0:3g}M'.format(val / 1000000).lstrip()
         # return '{:3g}M'.format(val/1000000).lstrip()
