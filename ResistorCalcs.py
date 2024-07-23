@@ -233,3 +233,20 @@ def PrettyPrint(val):
     else:
         return '{0:3g}M'.format(val / 1000000).lstrip()
         # return '{:3g}M'.format(val/1000000).lstrip()
+
+
+def WindowCompResString(Vnom, Vref, VTol, Rser, series):
+    # determine basic division ratio of divider to match rail to reference
+    DivRat = Vnom/Vref
+    # calculate required fraction of total series resistance needed for each resistor in the stack.
+    Fbot = (1-VTol)*(1/DivRat)
+    Fmid = (2 * VTol)*(1/DivRat)
+    Ftop = 1 - (Fbot+Fmid)
+    RmidActual = Closest_E_Value(Fmid * Rser, series)
+    RbotGoal = RmidActual*Fbot/Fmid
+    RbotActual = Closest_E_Value(RbotGoal, series)
+    FtopGoal = RmidActual*Ftop/Fmid
+    Rtop1 = Next_Lower_Val(Ftop*Rser, 96)
+    Rtop2 = Closest_E_Value(FtopGoal-Rtop1, 96)
+    print(f"Real resistor values: Top1 {Rtop1} Top2 {Rtop2} Middle {RmidActual} Bottom {RbotActual}")
+    print(f"Errors: Bottom {100*(1-(Fbot/Fmid)/(RbotActual/RmidActual))}%, Top {100*(1-(Fmid/Ftop)/(RmidActual/(Rtop1+Rtop2)))}%")
