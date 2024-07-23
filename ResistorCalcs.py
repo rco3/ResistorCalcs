@@ -244,9 +244,17 @@ def WindowCompResString(Vnom, Vref, VTol, Rser, series):
     Ftop = 1 - (Fbot+Fmid)
     RmidActual = Closest_E_Value(Fmid * Rser, series)
     RbotGoal = RmidActual*Fbot/Fmid
-    RbotActual = Closest_E_Value(RbotGoal, series)
+    Rbot1 = Next_Lower_Val(RbotGoal, series)
+    Rbot2 = Closest_E_Value(RbotGoal-Rbot1, series)
     FtopGoal = RmidActual*Ftop/Fmid
-    Rtop1 = Next_Lower_Val(Ftop*Rser, 96)
-    Rtop2 = Closest_E_Value(FtopGoal-Rtop1, 96)
-    print(f"Real resistor values: Top1 {Rtop1} Top2 {Rtop2} Middle {RmidActual} Bottom {RbotActual}")
-    print(f"Errors: Bottom {100*(1-(Fbot/Fmid)/(RbotActual/RmidActual))}%, Top {100*(1-(Fmid/Ftop)/(RmidActual/(Rtop1+Rtop2)))}%")
+    Rtop1 = Next_Lower_Val(Ftop*Rser, series)
+    Rtop2 = Closest_E_Value(FtopGoal-Rtop1, series)
+    print("Real resistors")
+    print(f"Top 1  : {PrettyPrint(Rtop1)}Ω")
+    print(f"Top 2  : {PrettyPrint(Rtop2)}Ω")
+    print(f"Middle : {PrettyPrint(RmidActual)}Ω")
+    print(f"Bottom1: {PrettyPrint(Rbot1)}Ω")
+    print(f"Bottom2: {PrettyPrint(Rbot2)}Ω")
+    # print(f"Errors: Bottom {100*(1-(((Rbot1+Rbot2)/RmidActual)/(Fbot/Fmid))):.3f}%, Top {100*(1-(RmidActual/(Rtop1+Rtop2))/(Fmid/Ftop)):.3f}%")
+
+
