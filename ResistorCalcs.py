@@ -21,6 +21,13 @@ def Closest_E_Value(value: float, series: int):
 
 
 def Value_From_Pos(serPos, series):
+    """
+    Converts a position in the standard resistor series to a value.
+
+    :param serPos: The position in the series (zero-indexed).
+    :param series: The standard series (e.g., 3, 6, 12, 24, 48, 96, 192).
+    :return: The resistor value.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
@@ -75,6 +82,13 @@ def Val_from_E96_code(code: str):
 
 
 def Next_Lower_Val(value, series):
+    """
+    Finds the next lower standard value from a given series, that is not greater than the specified value.
+
+    :param value: The target value.
+    :param series: The series to use (e.g., 3, 6, 12, 24, 48, 96, 192).
+    :return: The next lower value or 0 if the series is invalid.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
@@ -90,6 +104,13 @@ def Next_Lower_Val(value, series):
 
 
 def Next_Higher_Val(value, series):
+    """
+    Finds the next higher standard value from a given series, that is not less than the specified value.
+
+    :param value: The target value.
+    :param series: The series to use.
+    :return: The next higher value or 0 if the series is invalid.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
         return 0
     else:
@@ -105,16 +126,24 @@ def Next_Higher_Val(value, series):
 
 def Req_Par_Val(ValG, Val1):
     """
-    Given a goal value ValG and a base value Val1, find Val2 such that
+    Calculates the required parallel resistance value to achieve a specified goal resistance.
 
-    Val1 * Val2
-    ----------- = ValG
-    Val1 + Val2
+    :param ValG: The goal value.
+    :param Val1: The base resistance value.
+    :return: The required parallel resistance value.
     """
     return (ValG * Val1) / (Val1 - ValG)
 
 
 def ParPairErr(val, V1, V2):
+    """
+    Calculates the error percentage for a pair of resistors in parallel.
+
+    :param val: The target value.
+    :param V1: The first resistor value.
+    :param V2: The second resistor value.
+    :return: The percentage error.
+    """
     return round(100 * ((Vpar(V1, V2) - val) / val), 3)
     # See that '100*'?  That means this error is in %, baby!
 
@@ -124,6 +153,13 @@ def ParTripErr(val, V1, V2, V3):
 
 
 def Vpar(V1, V2):
+    """
+    Calculates the value of two resistors in parallel.
+
+    :param V1: The first resistor value.
+    :param V2: The second resistor value.
+    :return: The parallel resistance value.
+    """
     return (V1 * V2) / (V1 + V2)
 
 
@@ -235,26 +271,60 @@ def PrettyPrint(val):
         # return '{:3g}M'.format(val/1000000).lstrip()
 
 
+"""
+Calculate a 3-resistor string for generating the thresholds for a window comparator
+"""
+
+
 def WindowCompResString(Vnom, Vref, VTol, Rser, series):
-    # determine basic division ratio of divider to match rail to reference
-    DivRat = Vnom/Vref
-    # calculate required fraction of total series resistance needed for each resistor in the stack.
-    Fbot = (1-VTol)*(1/DivRat)
-    Fmid = (2 * VTol)*(1/DivRat)
-    Ftop = 1 - (Fbot+Fmid)
-    RmidActual = Closest_E_Value(Fmid * Rser, series)
-    RbotGoal = RmidActual*Fbot/Fmid
-    Rbot1 = Next_Lower_Val(RbotGoal, series)
-    Rbot2 = Closest_E_Value(RbotGoal-Rbot1, series)
-    FtopGoal = RmidActual*Ftop/Fmid
-    Rtop1 = Next_Lower_Val(Ftop*Rser, series)
-    Rtop2 = Closest_E_Value(FtopGoal-Rtop1, series)
-    print("Real resistors")
-    print(f"Top 1  : {PrettyPrint(Rtop1)}Ω")
-    print(f"Top 2  : {PrettyPrint(Rtop2)}Ω")
-    print(f"Middle : {PrettyPrint(RmidActual)}Ω")
-    print(f"Bottom1: {PrettyPrint(Rbot1)}Ω")
-    print(f"Bottom2: {PrettyPrint(Rbot2)}Ω")
-    # print(f"Errors: Bottom {100*(1-(((Rbot1+Rbot2)/RmidActual)/(Fbot/Fmid))):.3f}%, Top {100*(1-(RmidActual/(Rtop1+Rtop2))/(Fmid/Ftop)):.3f}%")
+    # determine basic division ratio of divider to match rail to reference
+    DivRat = Vnom / Vref
+    # calculate required fraction of total series resistance needed for each resistor in the stack.
+    Fbot = (1 - VTol) * (1 / DivRat)
+    Fmid = (2 * VTol) * (1 / DivRat)
+    Ftop = 1 - (Fbot + Fmid)
+    RmidActual = Closest_E_Value(Fmid * Rser, series)
+    RbotGoal = RmidActual * Fbot / Fmid
+    Rbot1 = Next_Lower_Val(RbotGoal, series)
+    Rbot2 = Closest_E_Value(RbotGoal - Rbot1, series)
+    FtopGoal = RmidActual * Ftop / Fmid
+    Rtop1 = Next_Lower_Val(Ftop * Rser, series)
+    Rtop2 = Closest_E_Value(FtopGoal - Rtop1, series)
+    print("Real resistors")
+    print(f"Top 1 : {PrettyPrint(Rtop1)}Ω")
+    print(f"Top 2 : {PrettyPrint(Rtop2)}Ω")
+    print(f"Middle : {PrettyPrint(RmidActual)}Ω")
+    print(f"Bottom1: {PrettyPrint(Rbot1)}Ω")
+    print(f"Bottom2: {PrettyPrint(Rbot2)}Ω")
+    # print(f"Errors: Bottom {100*(1-(((Rbot1+Rbot2)/RmidActual)/(Fbot/Fmid))):.3f}%, Top {100*(1-(RmidActual/(Rtop1+Rtop2))/(Fmid/Ftop)):.3f}%")
 
 
+def rail_meas_div_calc(v_in, v_out, r_src_max, series):
+    d = v_out/v_in
+    r_bot_ideal = r_src_max/(1-d)
+    r_bot_actual = Next_Lower_Val(r_bot_ideal, series)
+    r_top_actual = Closest_E_Value(r_bot_actual*((1/d)-1), series)
+    r_src_actual = (r_top_actual*r_bot_actual)/(r_top_actual+r_bot_actual)
+    v_vout_actual = v_in*(r_bot_actual)/(r_bot_actual+r_top_actual)
+    p_bot = (v_vout_actual**2)/r_bot_actual
+    p_tot = (v_in**2)/(r_bot_actual+r_top_actual)
+    p_top = p_tot - p_bot
+    i_div = v_in/(r_top_actual+r_bot_actual)
+    diagram = f"""
+  {v_in:.2f} V
+     │
+  {1000*i_div:.2f} mA 
+     │     
+┌────┴────┐     
+│ {PrettyPrint(r_top_actual):^8}│  {1000*p_top:.2f} mW
+└────┬────┘
+     │
+     ├─── Vout = {v_vout_actual:.2f} from {r_src_actual:.2f} Ω
+     │
+┌────┴────┐      
+│ {PrettyPrint(r_bot_actual):^8}│  {1000*p_bot:.2f} mW
+└────┬────┘
+     │
+    GND
+"""
+    print(diagram)
