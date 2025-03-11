@@ -299,30 +299,158 @@ def WindowCompResString(Vnom, Vref, VTol, Rser, series):
     # print(f"Errors: Bottom {100*(1-(((Rbot1+Rbot2)/RmidActual)/(Fbot/Fmid))):.3f}%, Top {100*(1-(RmidActual/(Rtop1+Rtop2))/(Fmid/Ftop)):.3f}%")
 
 
-def rail_meas_div_calc(v_in, v_out, r_src_max, series):
-    d = v_out/v_in
-    r_bot_ideal = r_src_max/(1-d)
-    r_bot_actual = Next_Lower_Val(r_bot_ideal, series)
-    r_top_actual = Closest_E_Value(r_bot_actual*((1/d)-1), series)
-    r_src_actual = (r_top_actual*r_bot_actual)/(r_top_actual+r_bot_actual)
-    v_vout_actual = v_in*(r_bot_actual)/(r_bot_actual+r_top_actual)
-    p_bot = (v_vout_actual**2)/r_bot_actual
-    p_tot = (v_in**2)/(r_bot_actual+r_top_actual)
+def calc_operational_values(v_in, r_top, r_bot, d):
+    """
+    Given v_in, chosen r_top and r_bot, and desired division ratio d = v_out/v_in,
+    compute operational characteristics.
+    """
+    r_src = (r_top * r_bot) / (r_top + r_bot)
+    v_out_actual = v_in * (r_bot / (r_top + r_bot))
+    p_bot = (v_out_actual ** 2) / r_bot
+    p_tot = (v_in ** 2) / (r_top + r_bot)
     p_top = p_tot - p_bot
-    i_div = v_in/(r_top_actual+r_bot_actual)
+    i_div = v_in / (r_top + r_bot)
+    return {
+        'r_top': r_top,
+        'r_bot': r_bot,
+        'r_src': r_src,
+        'v_out': v_out_actual,
+        'p_top': p_top,
+        'p_bot': p_bot,
+        'i_div': i_div,
+        'constraint': None  # will be set by the caller
+    }
+
+
+def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
+    """
+    Calculate divider candidate(s) based on provided constraints.
+
+    - If only r_src_max is provided, it selects the candidate that maximizes divider resistance
+      (i.e. highest impedance, lowest power dissipation).
+
+    - If only max_pd is provided, it selects the candidate that minimizes divider resistance
+      (i.e. lowest impedance, highest power dissipation) based on the power in the larger resistor.
+
+      For the max_pd candidate:
+        - If d <= 0.5 (lower V_out relative to V_in), then R_top is the limiter:
+              R_bot >= (v_in^2 * d * (1-d)) / max_pd
+        - If d >= 0.5, then R_bot is the limiter:
+              R_bot >= (v_in^2 * d^2) / max_pd
+
+    - If both are provided, it calculates both candidates.
+
+    Returns:
+      A list of candidate dictionaries.
+    """
+    d = v_out / v_in
+    candidates = []
+
+    # Candidate based on maximum source impedance constraint:
+    if r_src_max is not None:
+        # R_src = R_bot * (1-d) <= r_src_max  -->  R_bot <= r_src_max / (1-d)
+        r_bot_ideal = r_src_max / (1 - d)
+        # Snap to a real resistor value (highest standard resistor not exceeding the ideal)
+        r_bot_actual = Next_Lower_Val(r_bot_ideal, series)
+        # Calculate corresponding R_top using the divider ratio: R_top = R_bot*((1/d)-1)
+        r_top_ideal = r_bot_actual * ((1 / d) - 1)
+        r_top_actual = Closest_E_Value(r_top_ideal, series)
+        cand_imp = calc_operational_values(v_in, r_top_actual, r_bot_actual, d)
+        cand_imp['constraint'] = 'max_r_src'
+        candidates.append(cand_imp)
+
+    # Candidate based on maximum power dissipation constraint:
+    if max_pd is not None:
+        if d <= 0.5:
+            # Top resistor is the limiter:
+            # P_top = (v_in^2 * d * (1-d)) / R_bot <= max_pd  -->  R_bot >= (v_in^2 * d * (1-d)) / max_pd
+            r_bot_ideal = (v_in ** 2 * d * (1 - d)) / max_pd
+        else:
+            # Bottom resistor is the limiter:
+            # P_bot = (v_in^2 * d^2) / R_bot <= max_pd  -->  R_bot >= (v_in^2 * d^2) / max_pd
+            r_bot_ideal = (v_in ** 2 * d ** 2) / max_pd
+
+        # Snap to the next higher standard resistor value (to ensure power remains below the limit)
+        r_bot_actual = Next_Higher_Val(r_bot_ideal, series)
+        r_top_ideal = r_bot_actual * ((1 / d) - 1)
+        r_top_actual = Closest_E_Value(r_top_ideal, series)
+        cand_pd = calc_operational_values(v_in, r_top_actual, r_bot_actual, d)
+        cand_pd['constraint'] = 'max_pd'
+        candidates.append(cand_pd)
+
+    if not candidates:
+        raise ValueError("At least one constraint must be specified (r_src_max and/or max_pd).")
+
+    return candidates
+
+
+def display_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
+    """
+    Calls calc_divider_candidates() and displays the results:
+
+      - If only one candidate is computed (i.e. one constraint provided),
+        print an ASCII art diagram (via print_divider_candidate).
+
+      - If both constraints are provided (two candidates),
+        print a simple table with headers.
+
+    Returns:
+      The candidate dictionary (or list of dictionaries) from calc_divider_candidates().
+    """
+    candidates = calc_divider_candidates(v_in, v_out, series, r_src_max, max_pd)
+
+    if len(candidates) == 1:
+        # Use the detailed ASCII art output.
+        print_divider_candidate(candidates[0], v_in)
+    elif len(candidates) == 2:
+        # Print a simple table with headers.
+        header = "{:<12} {:<12} {:<12} {:<12} {:<12} {:<14} {:<14}".format(
+            "Constraint", "R_top", "R_bot", "R_src", "V_out", "P_top (mW)", "P_bot (mW)"
+        )
+        print(header)
+        print("-" * len(header))
+        for cand in candidates:
+            row = "{:<12} {:<12} {:<12} {:<12.2f} {:<12.2f} {:<14.2f} {:<14.2f}".format(
+                cand['constraint'],
+                PrettyPrint(cand['r_top']),
+                PrettyPrint(cand['r_bot']),
+                cand['r_src'],
+                cand['v_out'],
+                cand['p_top'] * 1000,
+                cand['p_bot'] * 1000
+            )
+            print(row)
+
+    return candidates
+
+
+def print_divider_candidate(candidate, v_in):
+    """
+    Print an ASCII diagram of a resistor divider based on the candidate data.
+
+    The candidate is a dictionary returned by calc_divider_candidates().
+    """
+    r_top = candidate['r_top']
+    r_bot = candidate['r_bot']
+    r_src = candidate['r_src']
+    v_out = candidate['v_out']
+    p_top = candidate['p_top']
+    p_bot = candidate['p_bot']
+    i_div = candidate['i_div']
+
     diagram = f"""
   {v_in:.2f} V
      │
-  {1000*i_div:.2f} mA 
+  {1000 * i_div:.2f} mA 
      │     
 ┌────┴────┐     
-│ {PrettyPrint(r_top_actual):^8}│  {1000*p_top:.2f} mW
+│ {PrettyPrint(r_top):^8}│  {1000 * p_top:.2f} mW
 └────┬────┘
      │
-     ├─── Vout = {v_vout_actual:.2f} from {r_src_actual:.2f} Ω
+     ├─── Vout = {v_out:.2f} V from {r_src:.2f} Ω
      │
 ┌────┴────┐      
-│ {PrettyPrint(r_bot_actual):^8}│  {1000*p_bot:.2f} mW
+│ {PrettyPrint(r_bot):^8}│  {1000 * p_bot:.2f} mW
 └────┬────┘
      │
     GND
