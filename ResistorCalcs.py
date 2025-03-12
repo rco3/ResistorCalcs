@@ -1,308 +1,450 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun May 31 22:29:25 2020
+ResistorCalcs.py - Utilities for resistor calculations in electronic design
 
-@author: robolsen3
+This module provides functions for working with standard resistor series,
+calculating parallel resistor combinations, and designing voltage dividers.
 """
 from math import log10, floor, ceil
+from typing import Dict, List, Tuple, Union, Optional, Any
 
 
-def Closest_E_Value(value: float, series: int):
+def closest_e_value(value: float, series: int) -> float:
+    """
+    Find the closest standard resistor value from a given series.
+
+    :param value: The target value to approximate.
+    :param series: The standard series (3, 6, 12, 24, 48, 96, 192).
+    :return: The closest standard value in the series.
+    :raises ValueError: If the series is invalid.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    nh = next_higher_val(value, series)
+    nl = next_lower_val(value, series)
+    if (nh - value) > (value - nl):
+        return nl
     else:
-        NH = Next_Higher_Val(value, series)
-        NL = Next_Lower_Val(value, series)
-        if (NH - value) > (value - NL):
-            return NL
-        else:
-            return NH
+        return nh
 
 
-def Value_From_Pos(serPos, series):
+def value_from_pos(ser_pos: int, series: int) -> float:
     """
     Converts a position in the standard resistor series to a value.
 
-    :param serPos: The position in the series (zero-indexed).
+    Applies the conventional deviations from mathematical values that have been
+    standardized in the industry. For example, a pure logarithmic division would
+    give 4.6, but the standard E12 series uses 4.7 instead.
+
+    :param ser_pos: The position in the series (zero-indexed).
     :param series: The standard series (e.g., 3, 6, 12, 24, 48, 96, 192).
     :return: The resistor value.
+    :raises ValueError: If the series is invalid.
     """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
-    else:
-        (decade, decPos) = divmod(serPos, series)
-        rounding = 2
-        if series in {3, 6, 12, 24}:
-            rounding = 1
-        scale = round(10 ** (decPos / series), rounding)
-        if series == 3:
-            if decPos == 2:
-                scale += 0.1  # 4.6 is really 4.7
-        if series == 6:
-            if decPos in {3, 4}:
-                scale += 0.1
-        if series == 12:
-            if decPos in {5, 6, 7, 8}:
-                scale += 0.1
-            elif decPos == 11:
-                scale = 8.2
-        if series == 24:  # there are a lot of "standard" values in the E24 series.  We have to catch them and fix them.
-            if decPos in {10, 11, 12, 13, 14, 15, 16}:
-                scale += 0.1  # 2.6 - 4.6 are really 2.7 - 4.7
-            elif decPos == 22:
-                scale = 8.2  # 8.3 is mathematically correct, so we use 8.2
-        elif series == 192:
-            if scale == 9.19:
-                scale = 9.20  # Ah, the rich tapestry of history
-        value = round(scale * 10 ** decade, 10)
-        if value > 0:
-            return value
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    (decade, dec_pos) = divmod(ser_pos, series)
+    rounding = 2
+    if series in {3, 6, 12, 24}:
+        rounding = 1
+    scale = round(10 ** (dec_pos / series), rounding)
+
+    # Apply conventional adjustments to standard values
+    if series == 3:
+        if dec_pos == 2:
+            scale += 0.1  # 4.6 is really 4.7
+    elif series == 6:
+        if dec_pos in {3, 4}:
+            scale += 0.1  # Adjust values by 0.1
+    elif series == 12:
+        if dec_pos in {5, 6, 7, 8}:
+            scale += 0.1  # Adjust values by 0.1
+        elif dec_pos == 11:
+            scale = 8.2  # 8.2 is the standard value
+    elif series == 24:  # Many "standard" values in the E24 series require adjustment
+        if dec_pos in {10, 11, 12, 13, 14, 15, 16}:
+            scale += 0.1  # 2.6 - 4.6 are really 2.7 - 4.7
+        elif dec_pos == 22:
+            scale = 8.2  # 8.2 is the standard value
+    elif series == 192:
+        if scale == 9.19:
+            scale = 9.20  # Historical convention
+
+    value = round(scale * 10 ** decade, 10)
+    if value > 0:
+        return value
+    return 0.0  # Fallback for invalid calculation
 
 
-def E96_Code_from_pos(pos: int):
-    decDict = {0: "Y", 1: "X", 2: "A", 3: "H", 4: "C", 5: "D", 6: "E", 7: "F", }
-    (decade, decPos) = divmod(pos, 96)
-    return f"{(decPos + 1):02d}{decDict[decade]}"
+def e96_code_from_pos(pos: int) -> str:
+    """
+    Convert a position in the E96 series to a standard code.
+
+    :param pos: The position in the E96 series.
+    :return: The E96 code string (format: "##X" where ## is position and X is decade).
+    """
+    dec_dict = {0: "Y", 1: "X", 2: "A", 3: "H", 4: "C", 5: "D", 6: "E", 7: "F"}
+    (decade, dec_pos) = divmod(pos, 96)
+    return f"{(dec_pos + 1):02d}{dec_dict[decade]}"
 
 
-def Val_from_E96_code(code: str):
-    decDict = {"Y": 1, "R": 1, "X": 10, "A": 100, "H": 1000, "B": 1000, "C": 10000, "D": 100000, "E": 1000000,
-               "F": 10000000, }
+def val_from_e96_code(code: str) -> Union[float, str]:
+    """
+    Convert an E96 code to its corresponding resistor value.
+
+    :param code: The E96 code string.
+    :return: The resistor value or an error message.
+    """
+    dec_dict = {
+        "Y": 1, "R": 1, "X": 10, "A": 100, "H": 1000, "B": 1000,
+        "C": 10000, "D": 100000, "E": 1000000, "F": 10000000
+    }
+
     if len(code) != 3:
         return "Invalid code"
-    else:
-        try:
-            print(f"Value code is {int(code[:2]):02d}, decade letter is {code[2]}")
-            print(f"That gives a decade multiplier of {decDict[code[2]]}")
-            print(f"The position value is {Value_From_Pos(int(code[:2]) - 1, 96)}")
-            return Value_From_Pos(int(code[:2]) - 1, 96) * decDict[code[2]]
-        except ValueError:
-            print("Couldn't interpret that code")
+
+    try:
+        print(f"Value code is {int(code[:2]):02d}, decade letter is {code[2]}")
+        print(f"That gives a decade multiplier of {dec_dict[code[2]]}")
+        print(f"The position value is {value_from_pos(int(code[:2]) - 1, 96)}")
+        return value_from_pos(int(code[:2]) - 1, 96) * dec_dict[code[2]]
+    except (ValueError, KeyError):
+        print("Couldn't interpret that code")
+        return "Invalid code"
 
 
-def Next_Lower_Val(value, series):
+def find_next_value(value: float, series: int, direction: str = "higher") -> float:
     """
-    Finds the next lower standard value from a given series, that is not greater than the specified value.
+    Finds the next standard value from a given series in the specified direction.
 
     :param value: The target value.
     :param series: The series to use (e.g., 3, 6, 12, 24, 48, 96, 192).
-    :return: The next lower value or 0 if the series is invalid.
+    :param direction: Either "higher" or "lower" to specify search direction.
+    :return: The next value in the specified direction.
+    :raises ValueError: If the series is invalid or the direction is not "higher" or "lower".
     """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    if direction not in ["higher", "lower"]:
+        raise ValueError(f"Invalid direction: {direction}. Must be either 'higher' or 'lower'")
+
+    # The logarithmic position calculation can sometimes miss the correct position
+    # due to the variance between mathematical and standard values
+    if direction == "lower":
+        pos = floor(log10(value) * series) + 1
+        step = -1
+        comparison_func = lambda x, y: x <= y  # For "lower", we want values <= target
+    else:  # direction == "higher"
+        pos = ceil(log10(value) * series) - 1
+        step = 1
+        comparison_func = lambda x, y: x >= y  # For "higher", we want values >= target
+
+    # Initial position check
+    new_val = value_from_pos(pos, series)
+
+    # Test multiple positions to ensure we get the correct 'next' value
+    if comparison_func(new_val, value):
+        return new_val
+    elif comparison_func(value_from_pos(pos + step, series), value):
+        return value_from_pos(pos + step, series)
     else:
-        Pos = floor(
-            log10(value) * series) + 1  # OH MY GOD I'm so lazy.  The variance between standard values and series
-        newVal = Value_From_Pos(Pos, series)  # values means that there are situations in which the next lower value in
-        if newVal <= value:  # the series is missed, in either direction (+1 position or -1)
-            return newVal  # so I just fucking TEST THEM ALL
-        elif Value_From_Pos(Pos - 1, series) < value:
-            return Value_From_Pos(Pos - 1, series)
-        else:
-            return Value_From_Pos(Pos - 2, series)
+        return value_from_pos(pos + 2 * step, series)
 
 
-def Next_Higher_Val(value, series):
+def next_lower_val(value: float, series: int) -> float:
     """
-    Finds the next higher standard value from a given series, that is not less than the specified value.
+    Finds the next lower standard value from a given series.
+
+    :param value: The target value.
+    :param series: The series to use (e.g., 3, 6, 12, 24, 48, 96, 192).
+    :return: The next lower value.
+    :raises ValueError: If the series is invalid.
+    """
+    return find_next_value(value, series, "lower")
+
+
+def next_higher_val(value: float, series: int) -> float:
+    """
+    Finds the next higher standard value from a given series.
 
     :param value: The target value.
     :param series: The series to use.
-    :return: The next higher value or 0 if the series is invalid.
+    :return: The next higher value.
+    :raises ValueError: If the series is invalid.
     """
-    if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
-    else:
-        Pos = ceil(log10(value) * series) - 1  # This mirrors my shame from Next_Lower_Val
-        newVal = Value_From_Pos(Pos, series)
-        if newVal >= value:
-            return newVal
-        elif Value_From_Pos(Pos + 1, series) > value:
-            return Value_From_Pos(Pos + 1, series)
-        else:
-            return Value_From_Pos(Pos + 2, series)
+    return find_next_value(value, series, "higher")
 
 
-def Req_Par_Val(ValG, Val1):
+def req_par_val(val_g: float, val1: float) -> float:
     """
-    Calculates the required parallel resistance value to achieve a specified goal resistance.
+    Calculates the required parallel resistance to achieve a goal resistance.
 
-    :param ValG: The goal value.
-    :param Val1: The base resistance value.
+    :param val_g: The goal value.
+    :param val1: The base resistance value.
     :return: The required parallel resistance value.
     """
-    return (ValG * Val1) / (Val1 - ValG)
+    return (val_g * val1) / (val1 - val_g)
 
 
-def ParPairErr(val, V1, V2):
+def par_pair_err(val: float, v1: float, v2: float) -> float:
     """
     Calculates the error percentage for a pair of resistors in parallel.
 
     :param val: The target value.
-    :param V1: The first resistor value.
-    :param V2: The second resistor value.
+    :param v1: The first resistor value.
+    :param v2: The second resistor value.
     :return: The percentage error.
     """
-    return round(100 * ((Vpar(V1, V2) - val) / val), 3)
-    # See that '100*'?  That means this error is in %, baby!
+    return round(100 * ((v_par(v1, v2) - val) / val), 3)
 
 
-def ParTripErr(val, V1, V2, V3):
-    return round(100 * ((ParTrips(V1, V2, V3) - val) / val), 5)
+def par_trip_err(val: float, v1: float, v2: float, v3: float) -> float:
+    """
+    Calculates the error percentage for three resistors in parallel.
+
+    :param val: The target value.
+    :param v1: The first resistor value.
+    :param v2: The second resistor value.
+    :param v3: The third resistor value.
+    :return: The percentage error.
+    """
+    return round(100 * ((par_trips(v1, v2, v3) - val) / val), 5)
 
 
-def Vpar(V1, V2):
+def v_par(v1: float, v2: float) -> float:
     """
     Calculates the value of two resistors in parallel.
 
-    :param V1: The first resistor value.
-    :param V2: The second resistor value.
+    :param v1: The first resistor value.
+    :param v2: The second resistor value.
     :return: The parallel resistance value.
     """
-    return (V1 * V2) / (V1 + V2)
+    return (v1 * v2) / (v1 + v2)
 
 
-def Next_H_Pos(val, series):
+def next_h_pos(val: float, series: int) -> int:
+    """
+    Find the position of the next higher standard value.
+
+    :param val: The target value.
+    :param series: The series to use.
+    :return: The position index.
+    :raises ValueError: If the series is invalid.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    e = ceil(log10(val) * series) - 1
+    if val <= value_from_pos(e, series):
+        return e
+    elif val <= value_from_pos(e + 1, series):
+        return e + 1
     else:
-        E = ceil(log10(val) * series) - 1
-        if val <= Value_From_Pos(E, series):
-            return E
-        elif val <= Value_From_Pos(E + 1, series):
-            return E + 1
-        else:
-            return E + 2
+        return e + 2
 
 
-def Next_L_Pos(val, series):
+def next_l_pos(val: float, series: int) -> int:
+    """
+    Find the position of the next lower standard value.
+
+    :param val: The target value.
+    :param series: The series to use.
+    :return: The position index.
+    :raises ValueError: If the series is invalid.
+    """
     if series not in {3, 6, 12, 24, 48, 96, 192}:
-        return 0
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    e = floor(log10(val) * series) + 1
+    if val >= value_from_pos(e, series):
+        return e
+    elif val >= value_from_pos(e - 1, series):
+        return e - 1
     else:
-        E = floor(log10(val) * series) + 1
-        if val >= Value_From_Pos(E, series):
-            return E
-        elif val >= Value_From_Pos(E - 1, series):
-            return E - 1
-        else:
-            return E - 2
+        return e - 2
 
 
-def Closest_Pos(val, series):
-    Up = Next_H_Pos(val, series)
-    Down = Next_L_Pos(val, series)
-    if (Value_From_Pos(Up, series) - val) > (val - Value_From_Pos(Down, series)):
-        return Down
+def closest_pos(val: float, series: int) -> int:
+    """
+    Find the position of the closest standard value.
+
+    :param val: The target value.
+    :param series: The series to use.
+    :return: The position index.
+    :raises ValueError: If the series is invalid.
+    """
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    up = next_h_pos(val, series)
+    down = next_l_pos(val, series)
+    if (value_from_pos(up, series) - val) > (val - value_from_pos(down, series)):
+        return down
     else:
-        return Up
+        return up
 
 
-def get_err_field_abs(elem):
+def get_err_field_abs(elem: Tuple) -> float:
+    """
+    Helper function to get the absolute error field from a tuple.
+    Used as a key function for sorting.
+
+    :param elem: A tuple containing the error value at index 3.
+    :return: The absolute error value.
+    """
     return abs(elem[3])
 
 
-def get_err_trips_abs(elem):
+def get_err_trips_abs(elem: Tuple) -> float:
+    """
+    Helper function to get the absolute error field from a tuple for triplets.
+    Used as a key function for sorting.
+
+    :param elem: A tuple containing the error value at index 4.
+    :return: The absolute error value.
+    """
     return abs(elem[4])
 
 
-def List_Par_Pairs(val, series):
+def list_par_pairs(val: float, series: int) -> List[Tuple[float, float, float, float]]:
     """
-    list all pairs of values in the series that
-    can achieve the desired val
-    """
+    List all pairs of standard resistor values that can approximately achieve
+    the desired value when connected in parallel.
 
-    Emin = Next_H_Pos(val, series)
-    Emax = Next_H_Pos(2 * val, series)
-    pairs = list()
-    for E in range(Emin, Emax):
-        V1 = Value_From_Pos(E, series)
-        # first resistor
-        V2e = Req_Par_Val(val, V1)
-        # second resistor exact value
-        V2h = Next_Higher_Val(V2e, series)
-        # second resistor next higher Series value
-        V2l = Next_Lower_Val(V2e, series)
-        # Second resistor next lower Series value
-        pairs.append((V1, V2h, Vpar(V1, V2h), ParPairErr(val, V1, V2h)))
-        pairs.append((V1, V2l, Vpar(V1, V2l), ParPairErr(val, V1, V2l)))
+    :param val: The target resistance value.
+    :param series: The standard series to use.
+    :return: A list of tuples (R1, R2, Rparallel, error%) sorted by error.
+    :raises ValueError: If the series is invalid.
+    """
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    e_min = next_h_pos(val, series)
+    e_max = next_h_pos(2 * val, series)
+    pairs = []
+
+    for e in range(e_min, e_max):
+        v1 = value_from_pos(e, series)  # First resistor
+        v2e = req_par_val(val, v1)  # Second resistor exact value
+        v2h = next_higher_val(v2e, series)  # Second resistor next higher value
+        v2l = next_lower_val(v2e, series)  # Second resistor next lower value
+
+        pairs.append((v1, v2h, v_par(v1, v2h), par_pair_err(val, v1, v2h)))
+        pairs.append((v1, v2l, v_par(v1, v2l), par_pair_err(val, v1, v2l)))
 
     pairs.sort(key=get_err_field_abs)
-    # print("Best fit is", pairs[0][0], "in parallel with", pairs[0][1],
-    #       "to get", pairs[0][2], "instead of", val, "for a",pairs[0][3],
-    #       "% error." )
-
     return pairs[0:220]
 
 
-def ParTrips(V1, V2, V3):
-    return Vpar(V1, Vpar(V3, V2))
+def par_trips(v1: float, v2: float, v3: float) -> float:
+    """
+    Calculate the equivalent resistance of three resistors in parallel.
+
+    :param v1: The first resistor value.
+    :param v2: The second resistor value.
+    :param v3: The third resistor value.
+    :return: The equivalent parallel resistance.
+    """
+    return v_par(v1, v_par(v3, v2))
 
 
-def List_Par_Trips(val, series):
-    # cascade of List_Par_Pairs; after finding series V1, find ideal V2, then
-    # find the closest series pairs to that value, and evaluate each such set
-    # of three.
-    Emin = Next_H_Pos(val, series)
-    Emax = Next_H_Pos(3 * val, series)
-    # print(Value_From_Pos(Emax, series))
-    trips = list()
-    for E in range(Emin, Emax):
-        V1 = Closest_E_Value(10 ** (E / series), series)
-        # first resistor
-        V2e = Req_Par_Val(val, V1)
-        pairs = List_Par_Pairs(V2e, series)
+def list_par_trips(val: float, series: int) -> List[Tuple[float, float, float, float, float]]:
+    """
+    List combinations of three standard resistor values that can approximately
+    achieve the desired value when connected in parallel.
+
+    :param val: The target resistance value.
+    :param series: The standard series to use.
+    :return: A list of tuples (R1, R2, R3, Rparallel, error%) sorted by error.
+    :raises ValueError: If the series is invalid.
+    """
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
+    e_min = next_h_pos(val, series)
+    e_max = next_h_pos(3 * val, series)
+    trips = []
+
+    for e in range(e_min, e_max):
+        v1 = closest_e_value(10 ** (e / series), series)
+        v2e = req_par_val(val, v1)
+        pairs = list_par_pairs(v2e, series)
+
         for item in pairs:
-            trips.append((V1, item[0], item[1], ParTrips(V1, item[0], item[1]),
-                          ParTripErr(val, V1, item[0], item[1])))
-    trips.sort(key=get_err_trips_abs)
+            trips.append((v1, item[0], item[1], par_trips(v1, item[0], item[1]),
+                          par_trip_err(val, v1, item[0], item[1])))
 
+    trips.sort(key=get_err_trips_abs)
     return trips[0:22]
 
 
-def PrettyPrint(val):
-    if val < 1000:  # no suffix required
+def pretty_print(val: float) -> str:
+    """
+    Format a resistance value with appropriate suffix (k, M).
+
+    :param val: The resistance value in ohms.
+    :return: A formatted string.
+    """
+    if val < 1000:  # No suffix required
         return '{0:3g}'.format(val).lstrip()
     elif val < 1000000:
         return '{0:3g}k'.format(val / 1000).lstrip()
-        # return '{:3g}k'.format(val/1000).lstrip()
     else:
         return '{0:3g}M'.format(val / 1000000).lstrip()
-        # return '{:3g}M'.format(val/1000000).lstrip()
 
 
-"""
-Calculate a 3-resistor string for generating the thresholds for a window comparator
-"""
+def window_comp_res_string(v_nom: float, v_ref: float, v_tol: float, r_ser: float, series: int) -> None:
+    """
+    Calculate a 3-resistor string for generating the thresholds for a window comparator.
 
+    :param v_nom: Nominal voltage.
+    :param v_ref: Reference voltage.
+    :param v_tol: Voltage tolerance.
+    :param r_ser: Series resistance.
+    :param series: The resistor series to use.
+    :raises ValueError: If the series is invalid.
+    """
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
 
-def WindowCompResString(Vnom, Vref, VTol, Rser, series):
-    # determine basic division ratio of divider to match rail to reference
-    DivRat = Vnom / Vref
-    # calculate required fraction of total series resistance needed for each resistor in the stack.
-    Fbot = (1 - VTol) * (1 / DivRat)
-    Fmid = (2 * VTol) * (1 / DivRat)
-    Ftop = 1 - (Fbot + Fmid)
-    RmidActual = Closest_E_Value(Fmid * Rser, series)
-    RbotGoal = RmidActual * Fbot / Fmid
-    Rbot1 = Next_Lower_Val(RbotGoal, series)
-    Rbot2 = Closest_E_Value(RbotGoal - Rbot1, series)
-    FtopGoal = RmidActual * Ftop / Fmid
-    Rtop1 = Next_Lower_Val(Ftop * Rser, series)
-    Rtop2 = Closest_E_Value(FtopGoal - Rtop1, series)
+    # Determine basic division ratio of divider to match rail to reference
+    div_rat = v_nom / v_ref
+    # Calculate required fraction of total series resistance for each resistor
+    f_bot = (1 - v_tol) * (1 / div_rat)
+    f_mid = (2 * v_tol) * (1 / div_rat)
+    f_top = 1 - (f_bot + f_mid)
+
+    r_mid_actual = closest_e_value(f_mid * r_ser, series)
+    r_bot_goal = r_mid_actual * f_bot / f_mid
+    r_bot1 = next_lower_val(r_bot_goal, series)
+    r_bot2 = closest_e_value(r_bot_goal - r_bot1, series)
+
+    f_top_goal = r_mid_actual * f_top / f_mid
+    r_top1 = next_lower_val(f_top * r_ser, series)
+    r_top2 = closest_e_value(f_top_goal - r_top1, series)
+
     print("Real resistors")
-    print(f"Top 1 : {PrettyPrint(Rtop1)}Ω")
-    print(f"Top 2 : {PrettyPrint(Rtop2)}Ω")
-    print(f"Middle : {PrettyPrint(RmidActual)}Ω")
-    print(f"Bottom1: {PrettyPrint(Rbot1)}Ω")
-    print(f"Bottom2: {PrettyPrint(Rbot2)}Ω")
-    # print(f"Errors: Bottom {100*(1-(((Rbot1+Rbot2)/RmidActual)/(Fbot/Fmid))):.3f}%, Top {100*(1-(RmidActual/(Rtop1+Rtop2))/(Fmid/Ftop)):.3f}%")
+    print(f"Top 1 : {pretty_print(r_top1)}Ω")
+    print(f"Top 2 : {pretty_print(r_top2)}Ω")
+    print(f"Middle : {pretty_print(r_mid_actual)}Ω")
+    print(f"Bottom1: {pretty_print(r_bot1)}Ω")
+    print(f"Bottom2: {pretty_print(r_bot2)}Ω")
 
 
-def calc_operational_values(v_in, r_top, r_bot, d):
+def calc_operational_values(v_in: float, r_top: float, r_bot: float, d: float) -> Dict[str, Any]:
     """
     Given v_in, chosen r_top and r_bot, and desired division ratio d = v_out/v_in,
     compute operational characteristics.
+
+    :param v_in: Input voltage.
+    :param r_top: Top resistor value.
+    :param r_bot: Bottom resistor value.
+    :param d: Division ratio (v_out/v_in).
+    :return: Dictionary with operational values.
     """
     r_src = (r_top * r_bot) / (r_top + r_bot)
     v_out_actual = v_in * (r_bot / (r_top + r_bot))
@@ -310,6 +452,7 @@ def calc_operational_values(v_in, r_top, r_bot, d):
     p_tot = (v_in ** 2) / (r_top + r_bot)
     p_top = p_tot - p_bot
     i_div = v_in / (r_top + r_bot)
+
     return {
         'r_top': r_top,
         'r_bot': r_bot,
@@ -318,11 +461,13 @@ def calc_operational_values(v_in, r_top, r_bot, d):
         'p_top': p_top,
         'p_bot': p_bot,
         'i_div': i_div,
-        'constraint': None  # will be set by the caller
+        'constraint': None  # Will be set by the caller
     }
 
 
-def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
+def calc_divider_candidates(v_in: float, v_out: float, series: int,
+                            r_src_max: Optional[float] = None,
+                            max_pd: Optional[float] = None) -> List[Dict[str, Any]]:
     """
     Calculate divider candidate(s) based on provided constraints.
 
@@ -332,17 +477,19 @@ def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
     - If only max_pd is provided, it selects the candidate that minimizes divider resistance
       (i.e. lowest impedance, highest power dissipation) based on the power in the larger resistor.
 
-      For the max_pd candidate:
-        - If d <= 0.5 (lower V_out relative to V_in), then R_top is the limiter:
-              R_bot >= (v_in^2 * d * (1-d)) / max_pd
-        - If d >= 0.5, then R_bot is the limiter:
-              R_bot >= (v_in^2 * d^2) / max_pd
-
     - If both are provided, it calculates both candidates.
 
-    Returns:
-      A list of candidate dictionaries.
+    :param v_in: Input voltage.
+    :param v_out: Desired output voltage.
+    :param series: The resistor series to use.
+    :param r_src_max: Maximum source impedance constraint.
+    :param max_pd: Maximum power dissipation constraint.
+    :return: A list of candidate dictionaries.
+    :raises ValueError: If no constraints are provided or if the series is invalid.
     """
+    if series not in {3, 6, 12, 24, 48, 96, 192}:
+        raise ValueError(f"Invalid series: {series}. Must be one of: 3, 6, 12, 24, 48, 96, 192")
+
     d = v_out / v_in
     candidates = []
 
@@ -351,10 +498,10 @@ def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
         # R_src = R_bot * (1-d) <= r_src_max  -->  R_bot <= r_src_max / (1-d)
         r_bot_ideal = r_src_max / (1 - d)
         # Snap to a real resistor value (highest standard resistor not exceeding the ideal)
-        r_bot_actual = Next_Lower_Val(r_bot_ideal, series)
+        r_bot_actual = next_lower_val(r_bot_ideal, series)
         # Calculate corresponding R_top using the divider ratio: R_top = R_bot*((1/d)-1)
         r_top_ideal = r_bot_actual * ((1 / d) - 1)
-        r_top_actual = Closest_E_Value(r_top_ideal, series)
+        r_top_actual = closest_e_value(r_top_ideal, series)
         cand_imp = calc_operational_values(v_in, r_top_actual, r_bot_actual, d)
         cand_imp['constraint'] = 'max_r_src'
         candidates.append(cand_imp)
@@ -371,9 +518,9 @@ def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
             r_bot_ideal = (v_in ** 2 * d ** 2) / max_pd
 
         # Snap to the next higher standard resistor value (to ensure power remains below the limit)
-        r_bot_actual = Next_Higher_Val(r_bot_ideal, series)
+        r_bot_actual = next_higher_val(r_bot_ideal, series)
         r_top_ideal = r_bot_actual * ((1 / d) - 1)
-        r_top_actual = Closest_E_Value(r_top_ideal, series)
+        r_top_actual = closest_e_value(r_top_ideal, series)
         cand_pd = calc_operational_values(v_in, r_top_actual, r_bot_actual, d)
         cand_pd['constraint'] = 'max_pd'
         candidates.append(cand_pd)
@@ -384,18 +531,19 @@ def calc_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
     return candidates
 
 
-def display_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None):
+def display_divider_candidates(v_in: float, v_out: float, series: int,
+                               r_src_max: Optional[float] = None,
+                               max_pd: Optional[float] = None) -> List[Dict[str, Any]]:
     """
-    Calls calc_divider_candidates() and displays the results:
+    Calls calc_divider_candidates() and displays the results.
 
-      - If only one candidate is computed (i.e. one constraint provided),
-        print an ASCII art diagram (via print_divider_candidate).
-
-      - If both constraints are provided (two candidates),
-        print a simple table with headers.
-
-    Returns:
-      The candidate dictionary (or list of dictionaries) from calc_divider_candidates().
+    :param v_in: Input voltage.
+    :param v_out: Desired output voltage.
+    :param series: The resistor series to use.
+    :param r_src_max: Maximum source impedance constraint.
+    :param max_pd: Maximum power dissipation constraint.
+    :return: The candidate dictionaries.
+    :raises ValueError: If no constraints are provided or if the series is invalid.
     """
     candidates = calc_divider_candidates(v_in, v_out, series, r_src_max, max_pd)
 
@@ -412,8 +560,8 @@ def display_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None)
         for cand in candidates:
             row = "{:<12} {:<12} {:<12} {:<12.2f} {:<12.2f} {:<14.2f} {:<14.2f}".format(
                 cand['constraint'],
-                PrettyPrint(cand['r_top']),
-                PrettyPrint(cand['r_bot']),
+                pretty_print(cand['r_top']),
+                pretty_print(cand['r_bot']),
                 cand['r_src'],
                 cand['v_out'],
                 cand['p_top'] * 1000,
@@ -424,11 +572,12 @@ def display_divider_candidates(v_in, v_out, series, r_src_max=None, max_pd=None)
     return candidates
 
 
-def print_divider_candidate(candidate, v_in):
+def print_divider_candidate(candidate: Dict[str, Any], v_in: float) -> None:
     """
     Print an ASCII diagram of a resistor divider based on the candidate data.
 
-    The candidate is a dictionary returned by calc_divider_candidates().
+    :param candidate: A dictionary returned by calc_divider_candidates().
+    :param v_in: Input voltage.
     """
     r_top = candidate['r_top']
     r_bot = candidate['r_bot']
@@ -444,13 +593,13 @@ def print_divider_candidate(candidate, v_in):
   {1000 * i_div:.2f} mA 
      │     
 ┌────┴────┐     
-│ {PrettyPrint(r_top):^8}│  {1000 * p_top:.2f} mW
+│ {pretty_print(r_top):^8}│  {1000 * p_top:.2f} mW
 └────┬────┘
      │
      ├─── Vout = {v_out:.2f} V from {r_src:.2f} Ω
      │
 ┌────┴────┐      
-│ {PrettyPrint(r_bot):^8}│  {1000 * p_bot:.2f} mW
+│ {pretty_print(r_bot):^8}│  {1000 * p_bot:.2f} mW
 └────┬────┘
      │
     GND
